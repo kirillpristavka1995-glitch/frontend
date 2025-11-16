@@ -9,12 +9,14 @@ type JsonSchemaType =
   | "Boolean"
   | "Null";
 
-export const Sidebar: React.FC = () => {
-  // ---------------------------------------------
-  // Sidebar refs и состояние
-  // ---------------------------------------------
+interface SidebarProps {
+  onOpenSchema: (schemaName: string, schemaJson: any) => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ onOpenSchema }) => {
   const asideRef = useRef<HTMLDivElement | null>(null);
 
+  // ================== DATA ==================
   const [schemas, setSchemas] = useState<string[]>([]);
   const [openSchemas, setOpenSchemas] = useState(false);
 
@@ -23,28 +25,21 @@ export const Sidebar: React.FC = () => {
     {}
   );
 
-  // ---------------------------------------------
-  // Контекстное меню: раздел "Справочники"
-  // ---------------------------------------------
-  const [rootContextMenu, setRootContextMenu] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
+  // ================== CONTEXT MENUS ==================
+  const [rootMenu, setRootMenu] = useState<{ x: number; y: number } | null>(
+    null
+  );
 
-  // Модалка создания схемы
-  const [showSchemaModal, setShowSchemaModal] = useState(false);
-  const [newSchemaName, setNewSchemaName] = useState("");
-
-  // ---------------------------------------------
-  // Контекстное меню: конкретная схема
-  // ---------------------------------------------
-  const [schemaContextMenu, setSchemaContextMenu] = useState<{
+  const [schemaMenu, setSchemaMenu] = useState<{
     x: number;
     y: number;
     schema: string;
   } | null>(null);
 
-  // Модалка создания поля
+  // ================== MODALS ==================
+  const [showSchemaModal, setShowSchemaModal] = useState(false);
+  const [newSchemaName, setNewSchemaName] = useState("");
+
   const [showFieldModal, setShowFieldModal] = useState(false);
   const [fieldSchemaName, setFieldSchemaName] = useState("");
   const [fieldName, setFieldName] = useState("");
@@ -53,25 +48,21 @@ export const Sidebar: React.FC = () => {
   const [refList, setRefList] = useState<string[]>([]);
   const [refValue, setRefValue] = useState("");
 
-  // ---------------------------------------------
-  // Глобальный обработчик закрытия меню
-  // ---------------------------------------------
+  // ================== CLOSE MENUS WHEN CLICK OUTSIDE ==================
   useEffect(() => {
-    const closeMenus = () => {
-      setRootContextMenu(null);
-      setSchemaContextMenu(null);
+    const close = () => {
+      setRootMenu(null);
+      setSchemaMenu(null);
     };
-    document.addEventListener("click", closeMenus);
-    return () => document.removeEventListener("click", closeMenus);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
   }, []);
 
-  // ---------------------------------------------
-  // Загрузка всех схем
-  // ---------------------------------------------
+  // ================== LOAD SCHEMAS ==================
   const reloadSchemas = async () => {
     try {
-      const response = await fetch("http://localhost:5253/api/schemas");
-      const data: string[] = await response.json();
+      const res = await fetch("http://localhost:5253/api/schemas");
+      const data: string[] = await res.json();
       setSchemas(data);
     } catch {
       console.error("Ошибка загрузки списка схем");
@@ -86,19 +77,14 @@ export const Sidebar: React.FC = () => {
     }
   };
 
-  // ---------------------------------------------
-  // Загрузка списка полей схемы
-  // ---------------------------------------------
+  // ================== LOAD PROPERTIES ==================
   const reloadProperties = async (schema: string) => {
     try {
-      const response = await fetch(
+      const res = await fetch(
         `http://localhost:5253/api/schemas/${schema}/properties`
       );
-      const data = await response.json();
-      setProperties((prev) => ({
-        ...prev,
-        [schema]: Object.keys(data),
-      }));
+      const data = await res.json();
+      setProperties((prev) => ({ ...prev, [schema]: Object.keys(data) }));
     } catch {
       console.error("Ошибка загрузки свойств схемы");
     }
@@ -112,9 +98,7 @@ export const Sidebar: React.FC = () => {
     }
   };
 
-  // ---------------------------------------------
-  // Создание новой схемы
-  // ---------------------------------------------
+  // ================== CREATE NEW SCHEMA ==================
   const createSchema = async () => {
     if (!newSchemaName.trim()) return;
 
@@ -133,21 +117,18 @@ export const Sidebar: React.FC = () => {
     }
   };
 
-  // ---------------------------------------------
-  // Создание поля
-  // ---------------------------------------------
+  // ================== CREATE NEW FIELD ==================
   const openAddFieldModal = async (schema: string) => {
     setFieldSchemaName(schema);
 
     try {
-      const response = await fetch("http://localhost:5253/api/schemas");
-      const data: string[] = await response.json();
-      setRefList(data);
+      const res = await fetch("http://localhost:5253/api/schemas");
+      setRefList(await res.json());
     } catch {
-      console.error("Ошибка загрузки ref-списка");
+      console.error("Ошибка загрузки списка схем для ref");
     }
 
-    setSchemaContextMenu(null);
+    setSchemaMenu(null);
     setShowFieldModal(true);
   };
 
@@ -177,13 +158,22 @@ export const Sidebar: React.FC = () => {
 
       await reloadProperties(fieldSchemaName);
     } catch {
-      console.error("Ошибка создания поля");
+      console.error("Ошибка добавления поля");
     }
   };
 
-  // ---------------------------------------------
-  // Рендер
-  // ---------------------------------------------
+  // ================== OPEN SCHEMA IN WORKSPACE (DOUBLE CLICK) ==================
+  const openSchemaInWorkspace = async (schema: string) => {
+    try {
+      const res = await fetch(`http://localhost:5253/api/schemas/${schema}`);
+      const schemaJson = await res.json();
+      onOpenSchema(schema, schemaJson);
+    } catch {
+      console.error("Ошибка загрузки JSON схемы");
+    }
+  };
+
+  // ================== RENDER ==================
   return (
     <aside
       ref={asideRef}
@@ -191,35 +181,31 @@ export const Sidebar: React.FC = () => {
     >
       <h2 className="text-xl font-semibold mb-4">Меню</h2>
 
-      {/* Справочники */}
+      {/* ================= Справочники ================= */}
       <button
         onClick={toggleSchemas}
         onContextMenu={(e) => {
           e.preventDefault();
           const rect = asideRef.current!.getBoundingClientRect();
-          setRootContextMenu({
+          setRootMenu({
             x: e.clientX - rect.left,
             y: e.clientY - rect.top,
           });
         }}
-        className="text-left p-2 rounded-lg hover:bg-gray-200 transition flex justify-between select-none"
+        className="text-left p-2 rounded-lg hover:bg-gray-200 transition select-none"
       >
-        <span>Справочники</span>
-        <span>{openSchemas ? "▲" : "▼"}</span>
+        Справочники
       </button>
 
-      {/* --- Контекстное меню Справочники --- */}
-      {rootContextMenu && (
+      {/* Контекстное меню для Справочников */}
+      {rootMenu && (
         <div
           className="absolute bg-white border shadow-lg rounded-md z-50 py-1"
-          style={{
-            top: rootContextMenu.y,
-            left: rootContextMenu.x,
-          }}
+          style={{ top: rootMenu.y, left: rootMenu.x }}
         >
           <button
             onClick={() => {
-              setRootContextMenu(null);
+              setRootMenu(null);
               setShowSchemaModal(true);
             }}
             className="px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
@@ -229,30 +215,43 @@ export const Sidebar: React.FC = () => {
         </div>
       )}
 
-      {/* --- Дерево схем --- */}
+      {/* ================= Список схем ================= */}
       {openSchemas && (
         <div className="ml-4 mt-1 flex flex-col gap-1">
           {schemas.map((schema) => (
-            <div key={schema}>
+            <div key={schema} className="flex flex-col">
+              {/* Узел схемы */}
               <div
-                onClick={() => toggleProperties(schema)}
+                className="flex items-center gap-2 p-2 text-sm rounded hover:bg-gray-100 cursor-pointer select-none"
+                onDoubleClick={() => openSchemaInWorkspace(schema)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   const rect = asideRef.current!.getBoundingClientRect();
-                  setSchemaContextMenu({
+                  setSchemaMenu({
                     x: e.clientX - rect.left,
                     y: e.clientY - rect.top,
                     schema,
                   });
                 }}
-                className="p-2 text-sm rounded hover:bg-gray-100 cursor-pointer flex justify-between select-none"
               >
-                📁 {schema}
-                <span>{openProperties[schema] ? "▲" : "▼"}</span>
+                {/* Иконка раскрытия / сворачивания */}
+                <span
+                  className="cursor-pointer select-none"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleProperties(schema);
+                  }}
+                >
+                  {openProperties[schema] ? "📂" : "📁"}
+                </span>
+
+                {/* Название схемы */}
+                <span>{schema}</span>
               </div>
 
+              {/* Поля схемы */}
               {openProperties[schema] && (
-                <div className="ml-4 mt-1 flex flex-col gap-1">
+                <div className="ml-6 mt-1 flex flex-col gap-1">
                   {(properties[schema] ?? []).map((prop) => (
                     <div
                       key={prop}
@@ -268,17 +267,14 @@ export const Sidebar: React.FC = () => {
         </div>
       )}
 
-      {/* --- Контекстное меню схемы --- */}
-      {schemaContextMenu && (
+      {/* Контекстное меню схемы */}
+      {schemaMenu && (
         <div
           className="absolute bg-white border shadow-lg rounded-md z-50 py-1"
-          style={{
-            top: schemaContextMenu.y,
-            left: schemaContextMenu.x,
-          }}
+          style={{ top: schemaMenu.y, left: schemaMenu.x }}
         >
           <button
-            onClick={() => openAddFieldModal(schemaContextMenu.schema)}
+            onClick={() => openAddFieldModal(schemaMenu.schema)}
             className="px-4 py-2 text-sm hover:bg-gray-100 w-full text-left"
           >
             ➕ Добавить поле
@@ -286,13 +282,13 @@ export const Sidebar: React.FC = () => {
         </div>
       )}
 
-      {/* ======================== МОДАЛКИ ========================= */}
-
-      {/* --- Модалка создания схемы --- */}
+      {/* ==================== Модалка: новая схема ==================== */}
       {showSchemaModal && (
         <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-80">
-            <h3 className="text-lg font-semibold mb-4">Новый справочник</h3>
+          <div className="bg-white shadow-lg rounded-xl p-6 w-80">
+            <h3 className="text-lg font-medium mb-4">
+              Новый справочник
+            </h3>
 
             <input
               value={newSchemaName}
@@ -304,13 +300,13 @@ export const Sidebar: React.FC = () => {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowSchemaModal(false)}
-                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+                className="px-3 py-1 bg-gray-200 rounded"
               >
                 Отмена
               </button>
               <button
                 onClick={createSchema}
-                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-3 py-1 bg-blue-600 text-white rounded"
               >
                 Создать
               </button>
@@ -319,15 +315,14 @@ export const Sidebar: React.FC = () => {
         </div>
       )}
 
-      {/* --- Модалка создания поля --- */}
+      {/* ==================== Модалка: новое поле ==================== */}
       {showFieldModal && (
         <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-lg p-6 w-80">
-            <h3 className="text-lg font-semibold mb-4">
-              Добавить поле в «{fieldSchemaName}»
+          <div className="bg-white shadow-lg rounded-xl p-6 w-80">
+            <h3 className="text-lg font-medium mb-4">
+              Новое поле в «{fieldSchemaName}»
             </h3>
 
-            {/* Имя поля */}
             <input
               value={fieldName}
               onChange={(e) => setFieldName(e.target.value)}
@@ -335,7 +330,6 @@ export const Sidebar: React.FC = () => {
               placeholder="Имя поля"
             />
 
-            {/* Тип */}
             <select
               value={fieldType}
               onChange={(e) => setFieldType(e.target.value as any)}
@@ -351,7 +345,6 @@ export const Sidebar: React.FC = () => {
               <option value="ref">Ref → другая схема</option>
             </select>
 
-            {/* Required только если не ref */}
             {fieldType !== "ref" && (
               <label className="flex items-center gap-2 mb-3">
                 <input
@@ -363,14 +356,13 @@ export const Sidebar: React.FC = () => {
               </label>
             )}
 
-            {/* Выбор ref схемы */}
             {fieldType === "ref" && (
               <select
                 value={refValue}
                 onChange={(e) => setRefValue(e.target.value)}
                 className="w-full border rounded p-2 mb-3"
               >
-                <option value="">— Выберите схему —</option>
+                <option value="">— выберите схему —</option>
                 {refList.map((r) => (
                   <option key={r} value={`${r}.json`}>
                     {r}
@@ -382,13 +374,13 @@ export const Sidebar: React.FC = () => {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowFieldModal(false)}
-                className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+                className="px-3 py-1 bg-gray-200 rounded"
               >
                 Отмена
               </button>
               <button
                 onClick={addField}
-                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-3 py-1 bg-blue-600 text-white rounded"
               >
                 Добавить
               </button>
